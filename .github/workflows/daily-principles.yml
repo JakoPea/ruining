@@ -1,0 +1,45 @@
+name: daily-principles
+
+on:
+  schedule:
+    - cron: "10 4 * * *"
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "指定发第几条（留空则按日期自动算）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-principles
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 体检卡片
+        run: node check-topic.mjs --topic principles --file principles.json
+
+      - name: 推送
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          if [ -z "$PUSHPLUS_TOKEN" ]; then
+            echo "::error::缺少 Secret PUSHPLUS_TOKEN"
+            exit 1
+          fi
+          if [ -n "${{ inputs.day }}" ]; then
+            node daily-push.mjs --topic principles --notify --day "${{ inputs.day }}"
+          else
+            node daily-push.mjs --topic principles --notify
+          fi
