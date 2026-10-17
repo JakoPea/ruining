@@ -61,6 +61,7 @@ jobs:
         run: |
           curl --silent --show-error --fail \
             --url "smtps://smtp.qq.com:465" --ssl-reqd \
+            --login-options AUTH=LOGIN \
             --mail-from "$SMTP_USER" --mail-rcpt "$MAIL_TO" \
             --user "$SMTP_USER:$SMTP_PASS" \
             --upload-file mail.txt && echo "邮件已发送"
