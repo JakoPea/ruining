@@ -1,0 +1,77 @@
+name: class-reminder
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "立刻发一封测试提醒（不管课表）"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: class-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 准备课表
+        env:
+          SCHEDULE_JSON: ${{ secrets.SCHEDULE_JSON }}
+        run: |
+          if [ -n "$SCHEDULE_JSON" ]; then
+            printf '%s' "$SCHEDULE_JSON" > schedule.json
+            echo "课表来自 Secret"
+          else
+            echo "课表来自仓库文件 schedule.json"
+          fi
+
+      - name: 判断是否该提醒并推送
+        id: remind
+        env:
+          REMIND_CHANNELS: email
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          FORCE=""
+          if [ "${{ inputs.force }}" = "true" ]; then FORCE="--force"; fi
+          node reminder.mjs --notify $FORCE
+          if [ -f mail.txt ]; then echo "mail=1" >> "$GITHUB_OUTPUT"; fi
+
+      - name: 发邮件（QQ 邮箱 SMTP）
+        if: steps.remind.outputs.mail == '1'
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          curl --silent --show-error --fail \
+            --url "smtps://smtp.qq.com:465" --ssl-reqd \
+            --mail-from "$SMTP_USER" --mail-rcpt "$MAIL_TO" \
+            --user "$SMTP_USER:$SMTP_PASS" \
+            --upload-file mail.txt && echo "邮件已发送"
+
+      - name: 记录已发送（去重）
+        run: |
+          rm -f mail.txt
+          if [ -n "$(git status --porcelain sent.json)" ]; then
+            git config user.name "class-reminder"
+            git config user.email "actions@github.com"
+            git add sent.json
+            git commit -m "chore: 记录已发送的提醒" || true
+            git push || true
+          fi
