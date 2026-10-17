@@ -41,7 +41,7 @@ jobs:
       - name: 判断是否该提醒并推送
         id: remind
         env:
-          REMIND_CHANNELS: email
+          REMIND_CHANNELS: email,webhook
           MAIL_TO: ${{ secrets.MAIL_TO }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
