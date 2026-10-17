@@ -1,0 +1,5 @@
+# 课表从 Secret 注入，不要提交进仓库（公开仓库尤其注意）
+schedule.json
+
+# 运行时产生的临时文件
+mail.txt
