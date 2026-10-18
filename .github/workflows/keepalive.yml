@@ -1,0 +1,58 @@
+name: keepalive
+
+# 两个作用：
+#   ① 每月提交一次心跳文件 —— GitHub 会在仓库 60 天无活动后自动停掉所有定时任务，
+#      每月一次 commit 就能把这个计时器重置（本 workflow 自己也算仓库活动）。
+#   ② 顺便做一次月度体检 —— 如果哪天你编辑 JSON 出了错、导致某一行的推送停摆，
+#      这里会先报红，不用等到当天发现没收到消息。
+
+on:
+  schedule:
+    - cron: "0 3 1 * *" # 每月 1 日 03:00 UTC = 11:00 北京时间
+  workflow_dispatch:
+
+permissions:
+  contents: write # 需要写权限才能提交心跳文件
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # 体检：四份内容文件里存在的都检查一遍，坏一个就报红
+      - name: 月度体检
+        run: |
+          set -e
+          for topic in principles shiji; do
+            if [ -f "$topic.json" ]; then
+              echo "--- 检查 $topic.json ---"
+              node check-topic.mjs --topic "$topic" --file "$topic.json"
+            fi
+          done
+          if [ -f "quotes.json" ]; then
+            echo "--- 检查 quotes.json ---"
+            node check-quotes.mjs || true   # 毛选那份体检脚本参数不同，失败不拦
+          fi
+
+      - name: 写心跳并提交
+        run: |
+          TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z' >> keepalive.txt
+          git config user.name "keepalive-bot"
+          git config user.email "actions@github.com"
+          git add keepalive.txt
+          if git diff --cached --quiet; then
+            echo "心跳文件无变化，跳过提交"
+          else
+            git commit -m "chore: keepalive $(TZ=Asia/Shanghai date '+%Y-%m-%d')"
+            git push
+            echo "已提交心跳，GitHub 的 60 天计时器已重置"
+          fi
